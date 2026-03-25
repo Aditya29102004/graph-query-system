@@ -1,0 +1,360 @@
+-- SAP Order-to-Cash sample dataset — tables aligned to sap-o2c-data JSONL exports.
+-- Run in Supabase: SQL Editor → paste → Run, or: supabase db push
+
+-- ---------------------------------------------------------------------------
+-- Core master data
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS plants (
+  plant text PRIMARY KEY,
+  plant_name text,
+  valuation_area text,
+  plant_customer text,
+  plant_supplier text,
+  factory_calendar text,
+  default_purchasing_organization text,
+  sales_organization text,
+  address_id text,
+  plant_category text,
+  distribution_channel text,
+  division text,
+  language text,
+  is_marked_for_archiving boolean
+);
+
+CREATE TABLE IF NOT EXISTS products (
+  product text PRIMARY KEY,
+  product_type text,
+  cross_plant_status text,
+  cross_plant_status_validity_date date,
+  creation_date timestamptz,
+  created_by_user text,
+  last_change_date date,
+  last_change_date_time timestamptz,
+  is_marked_for_deletion boolean,
+  product_old_id text,
+  gross_weight numeric,
+  weight_unit text,
+  net_weight numeric,
+  product_group text,
+  base_unit text,
+  division text,
+  industry_sector text
+);
+
+CREATE TABLE IF NOT EXISTS product_descriptions (
+  product text NOT NULL REFERENCES products (product) ON DELETE CASCADE,
+  language text NOT NULL,
+  product_description text,
+  PRIMARY KEY (product, language)
+);
+
+CREATE TABLE IF NOT EXISTS product_plants (
+  product text NOT NULL REFERENCES products (product) ON DELETE CASCADE,
+  plant text NOT NULL,
+  country_of_origin text,
+  region_of_origin text,
+  production_invtry_managed_loc text,
+  availability_check_type text,
+  fiscal_year_variant text,
+  profit_center text,
+  mrp_type text,
+  PRIMARY KEY (product, plant)
+);
+
+CREATE TABLE IF NOT EXISTS product_storage_locations (
+  product text NOT NULL,
+  plant text NOT NULL,
+  storage_location text NOT NULL,
+  physical_inventory_block_ind text,
+  date_of_last_posted_cnt_un_rstrcd_stk timestamptz,
+  PRIMARY KEY (product, plant, storage_location),
+  FOREIGN KEY (product, plant) REFERENCES product_plants (product, plant) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS business_partner_addresses (
+  business_partner text NOT NULL,
+  address_id text NOT NULL,
+  validity_start_date timestamptz,
+  validity_end_date timestamptz,
+  address_uuid uuid,
+  address_time_zone text,
+  city_name text,
+  country text,
+  po_box text,
+  po_box_deviating_city_name text,
+  po_box_deviating_country text,
+  po_box_deviating_region text,
+  po_box_is_without_number boolean,
+  po_box_lobby_name text,
+  po_box_postal_code text,
+  postal_code text,
+  region text,
+  street_name text,
+  tax_jurisdiction text,
+  transport_zone text,
+  PRIMARY KEY (business_partner, address_id)
+);
+
+CREATE TABLE IF NOT EXISTS customer_sales_area_assignments (
+  customer text NOT NULL,
+  sales_organization text NOT NULL,
+  distribution_channel text NOT NULL,
+  division text NOT NULL,
+  billing_is_blocked_for_customer text,
+  complete_delivery_is_defined boolean,
+  credit_control_area text,
+  currency text,
+  customer_payment_terms text,
+  delivery_priority text,
+  incoterms_classification text,
+  incoterms_location1 text,
+  sales_group text,
+  sales_office text,
+  shipping_condition text,
+  sls_unlmtd_ovrdeliv_is_allwd boolean,
+  supplying_plant text,
+  sales_district text,
+  exchange_rate_type text,
+  PRIMARY KEY (customer, sales_organization, distribution_channel, division)
+);
+
+-- ---------------------------------------------------------------------------
+-- Sales documents
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS sales_order_headers (
+  sales_order text PRIMARY KEY,
+  sales_order_type text,
+  sales_organization text,
+  distribution_channel text,
+  organization_division text,
+  sales_group text,
+  sales_office text,
+  sold_to_party text,
+  creation_date timestamptz,
+  created_by_user text,
+  last_change_date_time timestamptz,
+  total_net_amount numeric,
+  overall_delivery_status text,
+  overall_ord_reltd_billg_status text,
+  overall_sd_doc_reference_status text,
+  transaction_currency text,
+  pricing_date timestamptz,
+  requested_delivery_date timestamptz,
+  header_billing_block_reason text,
+  delivery_block_reason text,
+  incoterms_classification text,
+  incoterms_location1 text,
+  customer_payment_terms text,
+  total_credit_check_status text
+);
+
+CREATE TABLE IF NOT EXISTS sales_order_items (
+  sales_order text NOT NULL REFERENCES sales_order_headers (sales_order) ON DELETE CASCADE,
+  sales_order_item text NOT NULL,
+  sales_order_item_category text,
+  material text,
+  requested_quantity numeric,
+  requested_quantity_unit text,
+  transaction_currency text,
+  net_amount numeric,
+  material_group text,
+  production_plant text,
+  storage_location text,
+  sales_document_rjcn_reason text,
+  item_billing_block_reason text,
+  PRIMARY KEY (sales_order, sales_order_item)
+);
+
+CREATE TABLE IF NOT EXISTS sales_order_schedule_lines (
+  sales_order text NOT NULL,
+  sales_order_item text NOT NULL,
+  schedule_line text NOT NULL,
+  confirmed_delivery_date timestamptz,
+  order_quantity_unit text,
+  confd_order_qty_by_matl_avail_check numeric,
+  PRIMARY KEY (sales_order, sales_order_item, schedule_line),
+  FOREIGN KEY (sales_order, sales_order_item) REFERENCES sales_order_items (sales_order, sales_order_item) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------
+-- Billing
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS billing_document_headers (
+  billing_document text PRIMARY KEY,
+  billing_document_type text,
+  creation_date timestamptz,
+  creation_time jsonb,
+  last_change_date_time timestamptz,
+  billing_document_date timestamptz,
+  billing_document_is_cancelled boolean,
+  cancelled_billing_document text,
+  total_net_amount numeric,
+  transaction_currency text,
+  company_code text,
+  fiscal_year text,
+  accounting_document text,
+  sold_to_party text
+);
+
+CREATE TABLE IF NOT EXISTS billing_document_items (
+  billing_document text NOT NULL REFERENCES billing_document_headers (billing_document) ON DELETE CASCADE,
+  billing_document_item text NOT NULL,
+  material text,
+  billing_quantity numeric,
+  billing_quantity_unit text,
+  net_amount numeric,
+  transaction_currency text,
+  reference_sd_document text,
+  reference_sd_document_item text,
+  PRIMARY KEY (billing_document, billing_document_item)
+);
+
+-- ---------------------------------------------------------------------------
+-- Deliveries
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS outbound_delivery_headers (
+  delivery_document text PRIMARY KEY,
+  actual_goods_movement_date date,
+  actual_goods_movement_time jsonb,
+  creation_date timestamptz,
+  creation_time jsonb,
+  delivery_block_reason text,
+  hdr_general_incompletion_status text,
+  header_billing_block_reason text,
+  last_change_date date,
+  overall_goods_movement_status text,
+  overall_picking_status text,
+  overall_proof_of_delivery_status text,
+  shipping_point text
+);
+
+CREATE TABLE IF NOT EXISTS outbound_delivery_items (
+  delivery_document text NOT NULL REFERENCES outbound_delivery_headers (delivery_document) ON DELETE CASCADE,
+  delivery_document_item text NOT NULL,
+  actual_delivery_quantity numeric,
+  batch text,
+  delivery_quantity_unit text,
+  item_billing_block_reason text,
+  last_change_date date,
+  plant text,
+  reference_sd_document text,
+  reference_sd_document_item text,
+  storage_location text,
+  PRIMARY KEY (delivery_document, delivery_document_item)
+);
+
+-- ---------------------------------------------------------------------------
+-- FI / AR
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS journal_entry_items_accounts_receivable (
+  company_code text NOT NULL,
+  fiscal_year text NOT NULL,
+  accounting_document text NOT NULL,
+  gl_account text NOT NULL,
+  accounting_document_item text NOT NULL,
+  reference_document text,
+  cost_center text,
+  profit_center text,
+  transaction_currency text,
+  amount_in_transaction_currency numeric,
+  company_code_currency text,
+  amount_in_company_code_currency numeric,
+  posting_date timestamptz,
+  document_date timestamptz,
+  accounting_document_type text,
+  assignment_reference text,
+  last_change_date_time timestamptz,
+  customer text,
+  financial_account_type text,
+  clearing_date timestamptz,
+  clearing_accounting_document text,
+  clearing_doc_fiscal_year text,
+  PRIMARY KEY (company_code, fiscal_year, accounting_document, accounting_document_item, gl_account)
+);
+
+CREATE TABLE IF NOT EXISTS payments_accounts_receivable (
+  company_code text NOT NULL,
+  fiscal_year text NOT NULL,
+  accounting_document text NOT NULL,
+  accounting_document_item text NOT NULL,
+  clearing_date timestamptz,
+  clearing_accounting_document text,
+  clearing_doc_fiscal_year text,
+  amount_in_transaction_currency numeric,
+  transaction_currency text,
+  amount_in_company_code_currency numeric,
+  company_code_currency text,
+  customer text,
+  invoice_reference text,
+  invoice_reference_fiscal_year text,
+  sales_document text,
+  sales_document_item text,
+  posting_date timestamptz,
+  document_date timestamptz,
+  assignment_reference text,
+  gl_account text,
+  financial_account_type text,
+  profit_center text,
+  cost_center text,
+  PRIMARY KEY (company_code, fiscal_year, accounting_document, accounting_document_item)
+);
+
+-- ---------------------------------------------------------------------------
+-- Helpful indexes for joins
+-- ---------------------------------------------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_sales_order_items_material ON sales_order_items (material);
+CREATE INDEX IF NOT EXISTS idx_sales_order_headers_sold_to ON sales_order_headers (sold_to_party);
+CREATE INDEX IF NOT EXISTS idx_billing_headers_sold_to ON billing_document_headers (sold_to_party);
+CREATE INDEX IF NOT EXISTS idx_billing_items_ref_sd ON billing_document_items (reference_sd_document, reference_sd_document_item);
+CREATE INDEX IF NOT EXISTS idx_outbound_items_ref_sd ON outbound_delivery_items (reference_sd_document, reference_sd_document_item);
+CREATE INDEX IF NOT EXISTS idx_journal_ar_customer ON journal_entry_items_accounts_receivable (customer);
+CREATE INDEX IF NOT EXISTS idx_payments_ar_customer ON payments_accounts_receivable (customer);
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security (adjust for production)
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE plants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_descriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_plants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_storage_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE business_partner_addresses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_sales_area_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_order_headers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_order_schedule_lines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE billing_document_headers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE billing_document_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE outbound_delivery_headers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE outbound_delivery_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE journal_entry_items_accounts_receivable ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments_accounts_receivable ENABLE ROW LEVEL SECURITY;
+
+-- Demo read access (tighten for production with auth + tenant rules)
+CREATE POLICY "Allow read plants" ON plants FOR SELECT USING (true);
+CREATE POLICY "Allow read products" ON products FOR SELECT USING (true);
+CREATE POLICY "Allow read product_descriptions" ON product_descriptions FOR SELECT USING (true);
+CREATE POLICY "Allow read product_plants" ON product_plants FOR SELECT USING (true);
+CREATE POLICY "Allow read product_storage_locations" ON product_storage_locations FOR SELECT USING (true);
+CREATE POLICY "Allow read business_partner_addresses" ON business_partner_addresses FOR SELECT USING (true);
+CREATE POLICY "Allow read customer_sales_area_assignments" ON customer_sales_area_assignments FOR SELECT USING (true);
+CREATE POLICY "Allow read sales_order_headers" ON sales_order_headers FOR SELECT USING (true);
+CREATE POLICY "Allow read sales_order_items" ON sales_order_items FOR SELECT USING (true);
+CREATE POLICY "Allow read sales_order_schedule_lines" ON sales_order_schedule_lines FOR SELECT USING (true);
+CREATE POLICY "Allow read billing_document_headers" ON billing_document_headers FOR SELECT USING (true);
+CREATE POLICY "Allow read billing_document_items" ON billing_document_items FOR SELECT USING (true);
+CREATE POLICY "Allow read outbound_delivery_headers" ON outbound_delivery_headers FOR SELECT USING (true);
+CREATE POLICY "Allow read outbound_delivery_items" ON outbound_delivery_items FOR SELECT USING (true);
+CREATE POLICY "Allow read journal_entry_items_accounts_receivable" ON journal_entry_items_accounts_receivable FOR SELECT USING (true);
+CREATE POLICY "Allow read payments_accounts_receivable" ON payments_accounts_receivable FOR SELECT USING (true);
+
+-- Service role bypasses RLS; for inserts use service role or add INSERT policies.
+
+COMMENT ON SCHEMA public IS 'SAP O2C tables: sap-o2c-data JSONL';
