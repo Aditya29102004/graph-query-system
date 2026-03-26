@@ -1,5 +1,5 @@
 # Context Graph System with LLM-Powered Query Interface
-![Graph Interface](./screenshots/main.png)
+![Graph Interface](./screenshots/mains.png)
 ## Overview
 
 This project implements a context graph system over business data, enabling users to explore relationships between entities using natural language queries.
